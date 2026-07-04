@@ -1,0 +1,1 @@
+{"name":"@shade/sdk","version":"0.1.0","type":"module","private":true,"exports":{".":"./src/index.ts"},"scripts":{"test":"tsx src/sdk-test.ts"},"dependencies":{"@shade/cctp-utils":"*","@shade/note-vault":"*","tweetnacl":"^1.0.3"}}

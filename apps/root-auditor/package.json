@@ -1,0 +1,1 @@
+{"name":"@shade/root-auditor","version":"0.1.0","type":"module","private":true,"scripts":{"dev":"tsx src/server.ts","audit":"tsx src/audit-once.ts","test":"tsx src/audit-test.ts"}}

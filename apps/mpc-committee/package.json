@@ -1,0 +1,12 @@
+{
+  "name": "@shade/mpc-committee",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@shade/mpc-crypto": "*",
+    "fastify": "^5.2.1",
+    "pg": "^8.13.1",
+    "dotenv": "^16.4.7",
+    "uuid": "^11.0.5"
+  }
+}

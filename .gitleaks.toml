@@ -1,0 +1,35 @@
+# Shade — gitleaks configuration.
+#
+# The default ruleset flags several PUBLIC identifiers as "generic-api-key" because
+# they are high-entropy strings. None of these are secrets. This allowlist scopes out
+# ONLY those public patterns; real secrets are still scanned and will fail CI:
+#   - Stellar SECRET keys (S...) are NOT allowlisted (only C/G/M public addresses are).
+#   - EVM private keys (0x + 64 hex, 32 bytes) are NOT allowlisted (only 0x + 40 hex
+#     addresses, 20 bytes, are).
+#   - .env / .env.generated are gitignored and never committed (only .env.example).
+
+title = "Shade gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public, non-secret identifiers that trip the generic high-entropy rule."
+
+# Build artifacts committed in early history (Next.js cache — not source, not secrets).
+paths = [
+  '''\.next/''',
+]
+
+regexes = [
+  # Stellar contract (C), account (G), muxed (M) addresses — public, 56-char base32.
+  # Does NOT match Stellar secret keys, which start with S.
+  '''^[CGM][A-Z2-7]{55}$''',
+  # EVM addresses — public, 0x + 40 hex (20 bytes). Does NOT match private keys (0x + 64 hex).
+  '''^0x[0-9a-fA-F]{40}$''',
+]
+
+stopwords = [
+  # a wallet-type enum value in apps/api/src/schemas.ts, not a credential
+  "stellar_ed25519_signature",
+]

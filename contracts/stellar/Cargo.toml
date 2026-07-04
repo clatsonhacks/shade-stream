@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+  "commitment_tree",
+  "nullifier_registry",
+  "compliance_registry",
+  "shade_vault",
+  "intent_escrow",
+  "governance_guardian",
+  "proof_verifiers",
+  "shielded_pool"
+]
+# lean_imt tracks soroban-sdk 25 as a standalone crate; keep it out of this
+# soroban-sdk 23 workspace so it can be built/tested on its own.
+exclude = [
+  "lean_imt"
+]
+
+[workspace.dependencies]
+soroban-sdk = "23.0.3"
+
+[profile.release]
+overflow-checks = true

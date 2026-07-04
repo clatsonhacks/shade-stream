@@ -1,0 +1,578 @@
+diff --git a/privacy-pools/cli/coinutils/src/cli/args.rs b/privacy-pools/cli/coinutils/src/cli/args.rs
+index 440aa84..bde99c7 100644
+--- a/privacy-pools/cli/coinutils/src/cli/args.rs
++++ b/privacy-pools/cli/coinutils/src/cli/args.rs
+@@ -18,6 +18,10 @@ pub enum Commands {
+         /// Output file path
+         #[arg(short, long, default_value = "coin.json")]
+         output: String,
++        /// Asset id (decimal field element) bound into the commitment (Phase 2).
++        /// Required — an asset-less note is rejected (fail closed).
++        #[arg(long)]
++        asset_id: String,
+     },
+     /// Withdraw a coin
+     Withdraw {
+@@ -30,6 +34,39 @@ pub enum Commands {
+         /// Output file path
+         #[arg(short, long, default_value = "withdrawal.json")]
+         output: String,
++        /// P1.5 operation type (WITHDRAW_PUBLIC=1, WITHDRAW_CCTP=2, RFQ_SETTLEMENT=3)
++        #[arg(long, default_value = "1")]
++        operation_type: String,
++        /// P1.5 recipient hash (decimal field element; sha256(strkey) mod p)
++        #[arg(long, default_value = "0")]
++        recipient_hash: String,
++        /// P1.5 relayer fee (7dp), must be <= withdrawn value
++        #[arg(long, default_value = "0")]
++        relayer_fee: String,
++        /// P1.5 deadline ledger
++        #[arg(long, default_value = "0")]
++        deadline_ledger: String,
++        /// P1.6 RFQ quote hash (decimal field element; int(sha256(quote)[:31]))
++        #[arg(long, default_value = "0")]
++        quote_hash: String,
++        /// P1.6 RFQ intent hash (decimal field element; int(sha256(intent)[:31]))
++        #[arg(long, default_value = "0")]
++        intent_hash: String,
++        /// P1.6 RFQ fill-receipt hash (decimal field element; int(sha256(fill_tx)[:31]))
++        #[arg(long, default_value = "0")]
++        fill_receipt_hash: String,
++        /// P1.7 CCTP destination domain
++        #[arg(long, default_value = "0")]
++        destination_domain: String,
++        /// P1.7 CCTP destination recipient (decimal field element; int(recipient32))
++        #[arg(long, default_value = "0")]
++        destination_recipient: String,
++        /// P1.7 CCTP max fee (7dp)
++        #[arg(long, default_value = "0")]
++        max_fee: String,
++        /// P1.7 CCTP min finality threshold
++        #[arg(long, default_value = "0")]
++        min_finality_threshold: String,
+     },
+     /// Update association set
+     UpdateAssociation {
+@@ -38,6 +75,46 @@ pub enum Commands {
+         /// Label to add
+         label: String,
+     },
++    /// P1.9 recompute the lean-imt state root over a commitment list (no coin needed)
++    ComputeRoot {
++        /// State file path (JSON with a `commitments` array of decimal field elements)
++        state_file: String,
++    },
++    /// Generic Merkle inclusion proof for a leaf in a fixed-depth LeanIMT built
++    /// over a state file's `commitments` list. Prints JSON {root, leafIndex,
++    /// siblings}. Used to build compliance (allow/deny) witnesses off-chain.
++    MerkleProof {
++        /// State file path (JSON with a `commitments` array of decimal field elements)
++        state_file: String,
++        /// Index of the leaf to prove
++        leaf_index: u32,
++        /// Tree depth (default 2 = association/compliance depth)
++        #[arg(long, default_value = "2")]
++        depth: u32,
++    },
++    /// Build a hidden-amount PrivateTransfer witness (spend input -> output note + fee)
++    Transfer {
++        /// Input coin file path
++        coin_file: String,
++        /// State file path (all pool commitments incl. the input)
++        state_file: String,
++        /// Public fee (7dp), output value = input value - fee
++        fee: String,
++        /// Output scope for the new note
++        #[arg(long, default_value = "shade_transfer_out")]
++        out_scope: String,
++        /// Transfer-input (circuit witness) output path
++        #[arg(short, long, default_value = "transfer.json")]
++        output: String,
++        /// Output-coin file path (the new spendable note)
++        #[arg(long, default_value = "out_coin.json")]
++        out_coin: String,
++        /// Optional ASP association-set file: proves the spender's label is in
++        /// the allow-set (mirrors withdraw's --association-file). Without it,
++        /// the proof only verifies against an on-chain associationRoot of 0.
++        #[arg(long)]
++        association_file: Option<String>,
++    },
+ }
+ 
+ impl Cli {
+diff --git a/privacy-pools/cli/coinutils/src/cli/commands.rs b/privacy-pools/cli/coinutils/src/cli/commands.rs
+index 92bf7f3..5545302 100644
+--- a/privacy-pools/cli/coinutils/src/cli/commands.rs
++++ b/privacy-pools/cli/coinutils/src/cli/commands.rs
+@@ -27,14 +27,16 @@ impl CommandHandler {
+     }
+ 
+     /// Handle the generate command
+-    pub fn handle_generate(&self, scope: String, output: String) -> Result<()> {
++    pub fn handle_generate(&self, scope: String, output: String, asset_id: String) -> Result<()> {
+         info!("Generating coin with scope: {}", scope);
+         debug!("Output file: {}", output);
+ 
+         let env = Env::default();
+         env.cost_estimate().budget().reset_unlimited();
+ 
+-        let generated_coin = generate_coin(&env, scope.as_bytes());
++        // Phase 2: bind the asset id into the commitment.
++        let asset_id_fr = crate::crypto::conversions::decimal_string_to_bls_scalar(&env, &asset_id)?;
++        let generated_coin = generate_coin(&env, scope.as_bytes(), asset_id_fr);
+         debug!(
+             "Generated coin commitment: {}",
+             generated_coin.commitment_hex
+@@ -57,12 +59,24 @@ impl CommandHandler {
+     }
+ 
+     /// Handle the withdraw command
++    #[allow(clippy::too_many_arguments)]
+     pub fn handle_withdraw(
+         &self,
+         coin_file: String,
+         state_file: String,
+         association_file: Option<String>,
+         output: String,
++        operation_type: String,
++        recipient_hash: String,
++        relayer_fee: String,
++        deadline_ledger: String,
++        quote_hash: String,
++        intent_hash: String,
++        fill_receipt_hash: String,
++        destination_domain: String,
++        destination_recipient: String,
++        max_fee: String,
++        min_finality_threshold: String,
+     ) -> Result<()> {
+         info!("Processing withdrawal for coin: {}", coin_file);
+         debug!("State file: {}", state_file);
+@@ -86,12 +100,26 @@ impl CommandHandler {
+         };
+ 
+         // Generate withdrawal
+-        let snark_input = self.withdrawal_manager.withdraw_coin(
++        let mut snark_input = self.withdrawal_manager.withdraw_coin(
+             &env,
+             &existing_coin.coin,
+             &state_data,
+             association_set_data.as_ref(),
+         )?;
++        // P1.5 operation-specific bindings (passed through into the proof).
++        snark_input.operation_type = operation_type;
++        snark_input.recipient_hash = recipient_hash;
++        snark_input.relayer_fee = relayer_fee;
++        snark_input.deadline_ledger = deadline_ledger;
++        // P1.6 RFQ-settlement bindings (passed through into the proof).
++        snark_input.quote_hash = quote_hash;
++        snark_input.intent_hash = intent_hash;
++        snark_input.fill_receipt_hash = fill_receipt_hash;
++        // P1.7 WithdrawCCTP destination bindings (passed through into the proof).
++        snark_input.destination_domain = destination_domain;
++        snark_input.destination_recipient = destination_recipient;
++        snark_input.max_fee = max_fee;
++        snark_input.min_finality_threshold = min_finality_threshold;
+ 
+         // Save withdrawal data
+         let withdrawal_json = self
+@@ -125,6 +153,82 @@ impl CommandHandler {
+         println!("Association set updated successfully");
+         Ok(())
+     }
++
++    /// P1.9 Handle the compute-root command: recompute the lean-imt root over a
++    /// commitment list and print it (decimal). Used by the root-auditor service.
++    pub fn handle_compute_root(&self, state_file: String) -> Result<()> {
++        let env = Env::default();
++        env.cost_estimate().budget().reset_unlimited();
++        let state_data = self.file_manager.read_state_file(&state_file)?;
++        let root = self.withdrawal_manager.compute_root(&env, &state_data)?;
++        println!("{}", root);
++        Ok(())
++    }
++
++    /// Generic Merkle inclusion proof for `leaf_index` in a depth-`depth` LeanIMT
++    /// built over the state file's `commitments`. Prints {root, leafIndex,
++    /// siblings} as JSON (decimal field elements). Enables compliance
++    /// allow/deny-adjacency witnesses.
++    pub fn handle_merkle_proof(&self, state_file: String, leaf_index: u32, depth: u32) -> Result<()> {
++        use crate::crypto::conversions::{bls_scalar_to_decimal_string, decimal_string_to_bls_scalar};
++        use lean_imt::{LeanIMT, bls_scalar_to_bytes};
++        let env = Env::default();
++        env.cost_estimate().budget().reset_unlimited();
++        let state_data = self.file_manager.read_state_file(&state_file)?;
++        let mut tree = LeanIMT::new(&env, depth);
++        for c in state_data.commitments.iter() {
++            let fr = decimal_string_to_bls_scalar(&env, c)?;
++            tree.insert(bls_scalar_to_bytes(fr))?;
++        }
++        let (siblings, _d) = tree
++            .generate_proof(leaf_index)
++            .ok_or(crate::error::CoinUtilsError::ProofGenerationFailed)?;
++        let siblings_dec: Vec<String> = siblings.iter().map(|s| bls_scalar_to_decimal_string(&s)).collect();
++        let root = bls_scalar_to_decimal_string(&lean_imt::bytes_to_bls_scalar(&tree.get_root()));
++        let json = serde_json::json!({ "root": root, "leafIndex": leaf_index, "siblings": siblings_dec });
++        println!("{}", serde_json::to_string(&json).map_err(crate::error::CoinUtilsError::Json)?);
++        Ok(())
++    }
++
++    /// Handle the transfer command (hidden-amount PrivateTransfer witness)
++    #[allow(clippy::too_many_arguments)]
++    pub fn handle_transfer(
++        &self,
++        coin_file: String,
++        state_file: String,
++        fee: String,
++        out_scope: String,
++        output: String,
++        out_coin: String,
++        association_file: Option<String>,
++    ) -> Result<()> {
++        info!("Building PrivateTransfer witness for coin: {}", coin_file);
++        let env = Env::default();
++        env.cost_estimate().budget().reset_unlimited();
++
++        let coin = self.file_manager.read_coin_file(&coin_file)?;
++        let state = self.file_manager.read_state_file(&state_file)?;
++        // Read association set file if provided (mirrors handle_withdraw).
++        let association_set_data = if let Some(assoc_file) = association_file {
++            Some(self.file_manager.read_association_file(&assoc_file)?)
++        } else {
++            None
++        };
++        let manager = crate::merkle::transfer::TransferManager::new();
++        let (witness, new_coin) =
++            manager.build_transfer(&env, &coin.coin, &state, &fee, out_scope.as_bytes(), association_set_data.as_ref())?;
++
++        std::fs::write(&output, serde_json::to_string_pretty(&witness).map_err(crate::error::CoinUtilsError::Json)?)?;
++        self.file_manager.write_coin_file(&new_coin, &out_coin)?;
++
++        println!("Transfer witness:");
++        println!("  Fee: {}", witness.fee_public);
++        println!("  Output value: {}", witness.out_value);
++        println!("  Output commitment: {}", new_coin.commitment_hex);
++        println!("  Witness saved to: {}", output);
++        println!("  Output coin saved to: {}", out_coin);
++        Ok(())
++    }
+ }
+ 
+ impl Default for CommandHandler {
+diff --git a/privacy-pools/cli/coinutils/src/config.rs b/privacy-pools/cli/coinutils/src/config.rs
+index 2aff16c..2c76d4a 100644
+--- a/privacy-pools/cli/coinutils/src/config.rs
++++ b/privacy-pools/cli/coinutils/src/config.rs
+@@ -1,5 +1,10 @@
+ /// Configuration constants for the coinutils application
+-pub const COIN_VALUE: i128 = 1000000000; // 1 XLM in stroops
+-pub const TREE_DEPTH: u32 = 20;
++pub const COIN_VALUE: i128 = 5000000; // 0.5 USDC at 7 decimals (Shade) — fixed denomination
++pub const TREE_DEPTH: u32 = 12;
+ pub const ASSOCIATION_TREE_DEPTH: u32 = 2;
+ pub const MAX_ASSOCIATION_LABELS: usize = 4;
++
++// Nullifier domain separators (#3). Must match the shielded_pool contract's
++// configured pool_id / chain_id. nullifierHash = Poseidon(nullifier, pool_id, chain_id).
++pub const POOL_ID: &str = "1"; // Shade shielded pool v1
++pub const CHAIN_ID: &str = "148"; // Stellar (SLIP-44 coin type), testnet domain marker
+diff --git a/privacy-pools/cli/coinutils/src/crypto/coin.rs b/privacy-pools/cli/coinutils/src/crypto/coin.rs
+index 45ad905..3e3a566 100644
+--- a/privacy-pools/cli/coinutils/src/crypto/coin.rs
++++ b/privacy-pools/cli/coinutils/src/crypto/coin.rs
+@@ -29,20 +29,32 @@ pub fn generate_label(env: &Env, scope: &[u8], nonce: &[u8; 32]) -> BlsScalar {
+     poseidon_hash(env, &[scope_fr, nonce_fr])
+ }
+ 
+-/// Generate a commitment for a coin
++/// Generate a commitment for a coin.
++///
++/// Phase 2 (spec §6.3): the commitment is asset-bound —
++///   precommitment = Poseidon(nullifier, secret)
++///   assetValueLabel = Poseidon(assetId, value, label)
++///   commitment    = Poseidon(assetValueLabel, precommitment)
++/// so a USDC note and an XLM note are distinct at the proof layer. This uses only
++/// 2- and 3-input Poseidon (native soroban-poseidon t=3/t=4), the widths already
++/// verified byte-identical to the circom Poseidon255 — no unproven t=5.
+ pub fn generate_commitment(
+     env: &Env,
++    asset_id: BlsScalar,
+     value: BlsScalar,
+     label: BlsScalar,
+     nullifier: BlsScalar,
+     secret: BlsScalar,
+ ) -> BlsScalar {
+     let precommitment = poseidon_hash(env, &[nullifier, secret]);
+-    poseidon_hash(env, &[value, label, precommitment])
++    let asset_value_label = poseidon_hash(env, &[asset_id, value, label]);
++    poseidon_hash(env, &[asset_value_label, precommitment])
+ }
+ 
+-/// Generate a complete coin with all necessary components
+-pub fn generate_coin(env: &Env, scope: &[u8]) -> GeneratedCoin {
++/// Generate a complete coin with all necessary components. `asset_id` is the
++/// field-element id of the note's asset (Phase 2); it is bound into the
++/// commitment and recorded in the coin so spend proofs can prove the asset.
++pub fn generate_coin(env: &Env, scope: &[u8], asset_id: BlsScalar) -> GeneratedCoin {
+     use crate::crypto::conversions::bls_scalar_to_decimal_string;
+ 
+     let value = BlsScalar::from_u256(U256::from_u32(env, COIN_VALUE as u32));
+@@ -52,6 +64,7 @@ pub fn generate_coin(env: &Env, scope: &[u8]) -> GeneratedCoin {
+     let label = generate_label(env, scope, &nonce);
+     let commitment = generate_commitment(
+         env,
++        asset_id.clone(),
+         value.clone(),
+         label.clone(),
+         nullifier.clone(),
+@@ -63,6 +76,7 @@ pub fn generate_coin(env: &Env, scope: &[u8]) -> GeneratedCoin {
+     let secret_decimal = bls_scalar_to_decimal_string(&secret);
+     let label_decimal = bls_scalar_to_decimal_string(&label);
+     let commitment_decimal = bls_scalar_to_decimal_string(&commitment);
++    let asset_id_decimal = bls_scalar_to_decimal_string(&asset_id);
+ 
+     let coin_data = CoinData {
+         value: value_decimal,
+@@ -70,6 +84,7 @@ pub fn generate_coin(env: &Env, scope: &[u8]) -> GeneratedCoin {
+         secret: secret_decimal,
+         label: label_decimal,
+         commitment: commitment_decimal,
++        asset_id: asset_id_decimal,
+     };
+ 
+     GeneratedCoin {
+@@ -95,12 +110,13 @@ mod tests {
+     #[test]
+     fn test_generate_commitment() {
+         let env = Env::default();
++        let asset_id = BlsScalar::from_u256(U256::from_u32(&env, 50));
+         let value = BlsScalar::from_u256(U256::from_u32(&env, 100));
+         let label = BlsScalar::from_u256(U256::from_u32(&env, 200));
+         let nullifier = BlsScalar::from_u256(U256::from_u32(&env, 300));
+         let secret = BlsScalar::from_u256(U256::from_u32(&env, 400));
+ 
+-        let result = generate_commitment(&env, value, label, nullifier, secret);
++        let result = generate_commitment(&env, asset_id, value, label, nullifier, secret);
+         // Just verify it doesn't panic and returns a valid scalar
+         assert!(result.to_bytes().to_array().iter().any(|&x| x != 0));
+     }
+@@ -109,10 +125,12 @@ mod tests {
+     fn test_generate_coin() {
+         let env = Env::default();
+         let scope = b"test_scope";
+-        let result = generate_coin(&env, scope);
++        let asset_id = BlsScalar::from_u256(U256::from_u32(&env, 42));
++        let result = generate_coin(&env, scope, asset_id);
+ 
+         // Verify the coin has all required fields
+         assert!(!result.coin.value.is_empty());
++        assert!(!result.coin.asset_id.is_empty());
+         assert!(!result.coin.nullifier.is_empty());
+         assert!(!result.coin.secret.is_empty());
+         assert!(!result.coin.label.is_empty());
+diff --git a/privacy-pools/cli/coinutils/src/main.rs b/privacy-pools/cli/coinutils/src/main.rs
+index c920f69..9b68194 100644
+--- a/privacy-pools/cli/coinutils/src/main.rs
++++ b/privacy-pools/cli/coinutils/src/main.rs
+@@ -11,17 +11,55 @@ fn main() {
+     let command_handler = CommandHandler::new();
+ 
+     let result = match cli.command {
+-        Commands::Generate { scope, output } => command_handler.handle_generate(scope, output),
++        Commands::Generate { scope, output, asset_id } => command_handler.handle_generate(scope, output, asset_id),
+         Commands::Withdraw {
+             coin_file,
+             state_file,
+             association_file,
+             output,
+-        } => command_handler.handle_withdraw(coin_file, state_file, association_file, output),
++            operation_type,
++            recipient_hash,
++            relayer_fee,
++            deadline_ledger,
++            quote_hash,
++            intent_hash,
++            fill_receipt_hash,
++            destination_domain,
++            destination_recipient,
++            max_fee,
++            min_finality_threshold,
++        } => command_handler.handle_withdraw(
++            coin_file,
++            state_file,
++            association_file,
++            output,
++            operation_type,
++            recipient_hash,
++            relayer_fee,
++            deadline_ledger,
++            quote_hash,
++            intent_hash,
++            fill_receipt_hash,
++            destination_domain,
++            destination_recipient,
++            max_fee,
++            min_finality_threshold,
++        ),
+         Commands::UpdateAssociation {
+             association_file,
+             label,
+         } => command_handler.handle_update_association(association_file, label),
++        Commands::ComputeRoot { state_file } => command_handler.handle_compute_root(state_file),
++        Commands::MerkleProof { state_file, leaf_index, depth } => command_handler.handle_merkle_proof(state_file, leaf_index, depth),
++        Commands::Transfer {
++            coin_file,
++            state_file,
++            fee,
++            out_scope,
++            output,
++            out_coin,
++            association_file,
++        } => command_handler.handle_transfer(coin_file, state_file, fee, out_scope, output, out_coin, association_file),
+     };
+ 
+     if let Err(e) = result {
+diff --git a/privacy-pools/cli/coinutils/src/merkle/mod.rs b/privacy-pools/cli/coinutils/src/merkle/mod.rs
+index d0c5252..552a253 100644
+--- a/privacy-pools/cli/coinutils/src/merkle/mod.rs
++++ b/privacy-pools/cli/coinutils/src/merkle/mod.rs
+@@ -1,5 +1,7 @@
+ pub mod association;
++pub mod transfer;
+ pub mod withdrawal;
+ 
+ pub use association::*;
++pub use transfer::*;
+ pub use withdrawal::*;
+diff --git a/privacy-pools/cli/coinutils/src/merkle/withdrawal.rs b/privacy-pools/cli/coinutils/src/merkle/withdrawal.rs
+index f112d23..3db1625 100644
+--- a/privacy-pools/cli/coinutils/src/merkle/withdrawal.rs
++++ b/privacy-pools/cli/coinutils/src/merkle/withdrawal.rs
+@@ -28,10 +28,13 @@ impl WithdrawalManager {
+         let nullifier = decimal_string_to_bls_scalar(env, &coin.nullifier)?;
+         let secret = decimal_string_to_bls_scalar(env, &coin.secret)?;
+         let label = decimal_string_to_bls_scalar(env, &coin.label)?;
++        // Phase 2: the note's asset id is bound into the commitment.
++        let asset_id = decimal_string_to_bls_scalar(env, &coin.asset_id)?;
+ 
+         // Reconstruct the commitment to verify it matches
+         let commitment = generate_commitment(
+             env,
++            asset_id.clone(),
+             value.clone(),
+             label.clone(),
+             nullifier.clone(),
+@@ -97,6 +100,7 @@ impl WithdrawalManager {
+ 
+         Ok(SnarkInput {
+             withdrawn_value: crate::config::COIN_VALUE.to_string(),
++            asset_id: coin.asset_id.clone(),
+             label: label_decimal,
+             value: value_decimal,
+             nullifier: nullifier_decimal,
+@@ -110,9 +114,41 @@ impl WithdrawalManager {
+             association_root,
+             label_index,
+             label_siblings,
++            pool_id: crate::config::POOL_ID.to_string(),
++            chain_id: crate::config::CHAIN_ID.to_string(),
++            // P1.5 defaults; overridden by handle_withdraw from CLI args.
++            operation_type: "1".to_string(),
++            recipient_hash: "0".to_string(),
++            relayer_fee: "0".to_string(),
++            deadline_ledger: "0".to_string(),
++            // P1.6 defaults; overridden by handle_withdraw from CLI args.
++            quote_hash: "0".to_string(),
++            intent_hash: "0".to_string(),
++            fill_receipt_hash: "0".to_string(),
++            // P1.7 defaults; overridden by handle_withdraw from CLI args.
++            destination_domain: "0".to_string(),
++            destination_recipient: "0".to_string(),
++            max_fee: "0".to_string(),
++            min_finality_threshold: "0".to_string(),
+         })
+     }
+ 
++    /// P1.9 root auditor: recompute the lean-imt state root over an ordered
++    /// commitment list, independent of owning any coin. Returns the root as a
++    /// decimal field-element string (matches the registrar's stateRoot).
++    pub fn compute_root(&self, env: &Env, state_file: &StateFile) -> Result<String> {
++        let mut tree = LeanIMT::new(env, TREE_DEPTH);
++        for (index, commitment_str) in state_file.commitments.iter().enumerate() {
++            let commitment_fr = decimal_string_to_bls_scalar(env, commitment_str).map_err(|e| {
++                CoinUtilsError::InvalidDecimal(format!("Invalid commitment at index {}: {}", index, e))
++            })?;
++            let commitment_bytes = lean_imt::bls_scalar_to_bytes(commitment_fr);
++            tree.insert(commitment_bytes)?;
++        }
++        let root_scalar = lean_imt::bytes_to_bls_scalar(&tree.get_root());
++        Ok(bls_scalar_to_decimal_string(&root_scalar))
++    }
++
+     /// Handle association set processing for withdrawal
+     fn handle_association_set(
+         &self,
+diff --git a/privacy-pools/cli/coinutils/src/types/coin.rs b/privacy-pools/cli/coinutils/src/types/coin.rs
+index 6d4c203..e2f1010 100644
+--- a/privacy-pools/cli/coinutils/src/types/coin.rs
++++ b/privacy-pools/cli/coinutils/src/types/coin.rs
+@@ -7,6 +7,10 @@ pub struct CoinData {
+     pub secret: String,
+     pub label: String,
+     pub commitment: String,
++    // Phase 2: field-element asset id bound into the commitment
++    // (commitment = Poseidon(assetId, value, label, Poseidon(nullifier, secret))).
++    #[serde(default)]
++    pub asset_id: String,
+ }
+ 
+ #[derive(Serialize, Deserialize)]
+diff --git a/privacy-pools/cli/coinutils/src/types/snark.rs b/privacy-pools/cli/coinutils/src/types/snark.rs
+index eeba96a..f5ccf8d 100644
+--- a/privacy-pools/cli/coinutils/src/types/snark.rs
++++ b/privacy-pools/cli/coinutils/src/types/snark.rs
+@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
+ pub struct SnarkInput {
+     #[serde(rename = "withdrawnValue")]
+     pub withdrawn_value: String,
++    // Phase 2: asset id bound into the commitment; also a public signal.
++    #[serde(rename = "assetId")]
++    pub asset_id: String,
+     pub label: String,
+     pub value: String,
+     pub nullifier: String,
+@@ -20,4 +23,34 @@ pub struct SnarkInput {
+     pub label_index: String,
+     #[serde(rename = "labelSiblings")]
+     pub label_siblings: Vec<String>,
++    // #3 nullifier domain separators (must match shielded_pool pool_id/chain_id)
++    #[serde(rename = "poolId")]
++    pub pool_id: String,
++    #[serde(rename = "chainId")]
++    pub chain_id: String,
++    // P1.5 operation-specific bindings (contract enforces these match args)
++    #[serde(rename = "operationType")]
++    pub operation_type: String,
++    #[serde(rename = "recipientHash")]
++    pub recipient_hash: String,
++    #[serde(rename = "relayerFee")]
++    pub relayer_fee: String,
++    #[serde(rename = "deadlineLedger")]
++    pub deadline_ledger: String,
++    // P1.6 RFQ-settlement bindings (contract enforces these match args)
++    #[serde(rename = "quoteHash")]
++    pub quote_hash: String,
++    #[serde(rename = "intentHash")]
++    pub intent_hash: String,
++    #[serde(rename = "fillReceiptHash")]
++    pub fill_receipt_hash: String,
++    // P1.7 WithdrawCCTP destination bindings (contract enforces these match args)
++    #[serde(rename = "destinationDomain")]
++    pub destination_domain: String,
++    #[serde(rename = "destinationRecipient")]
++    pub destination_recipient: String,
++    #[serde(rename = "maxFee")]
++    pub max_fee: String,
++    #[serde(rename = "minFinalityThreshold")]
++    pub min_finality_threshold: String,
+ }
