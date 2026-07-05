@@ -51,3 +51,15 @@ export const NULLIFIER_REGISTRY_ABI = [
   "function isSpent(bytes32 nullifier) view returns (bool)",
   "function isAuthorized(address spender) view returns (bool)",
 ] as const;
+
+// StreamEscrow — Shade Streams payment channels.
+export const STREAM_ESCROW_ABI = [
+  "function open(tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) proof, uint256[13] pub)",
+  "function settle(tuple(uint256[2] a, uint256[2][2] b, uint256[2] c) proof, uint256[11] pub)",
+  "function settleBatch(tuple(uint256[2] a, uint256[2][2] b, uint256[2] c)[] proofs, uint256[11][] pubs)",
+  "function reclaim(uint256 channelId)",
+  "function getChannel(uint256 channelId) view returns (tuple(uint256 payerAx, uint256 payerAy, uint256 cap, uint256 expiry, uint256 reclaimCommitment, uint256 assetId, bool opened, bool consumed))",
+  "event ChannelOpened(uint256 indexed channelId, uint256 cap, uint256 expiry, uint256 changeCommitment)",
+  "event ChannelSettled(uint256 indexed channelId, uint256 cumulative, uint256 payeeCommitment, uint256 refundCommitment)",
+  "event ChannelReclaimed(uint256 indexed channelId, uint256 cap, uint256 reclaimCommitment)",
+] as const;

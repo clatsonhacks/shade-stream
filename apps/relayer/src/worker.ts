@@ -23,7 +23,8 @@ export const RELAYER_JOB_TYPES = [
   "RFQ_ATOMIC_SWAP_SUBMIT",  // submit an atomic USDC->XLM rfq_settle_atomic_swap
   "CCTP_OUTBOUND_ATTESTATION", // poll Circle for the Stellar->Arbitrum burn attestation
   "CCTP_OUTBOUND_MINT",      // complete the Arbitrum mint (MessageTransmitter.receiveMessage)
-  "MPC_SETTLE_SUBMIT"        // submit committee-signed MPC match batch to the pool
+  "MPC_SETTLE_SUBMIT",       // submit committee-signed MPC match batch to the pool
+  "STREAM_SETTLE_BATCH"      // Shade Streams: batch-close channels via StreamEscrow.settleBatch
 ] as const;
 
 export type RelayerJobType = (typeof RELAYER_JOB_TYPES)[number];
@@ -155,6 +156,34 @@ export async function processRelayerJob(queue: JobQueue, job: ServiceJob): Promi
       return { txHash: r.hash, status: r.status };
     }
     throw new Error(`${job.job_type} requires a client-signed payload: signedRawTx (Arc) or signedXdr (Stellar)`);
+  }
+
+  if (job.job_type === "STREAM_SETTLE_BATCH") {
+    // Shade Streams: batch-close channels. The payload carries an array of
+    // pre-built stream_settle proofs (from buildStreamSettleProofBn254); the
+    // relayer bundles them into one StreamEscrow.settleBatch tx. No special
+    // privilege — each settle is proof-gated on-chain exactly like a single one.
+    const { submitSettlementBatch } = await import("./stream-relayer.js");
+    const escrow = env.ARC_STREAM_ESCROW_CONTRACT;
+    const arcRpcUrl = env.ARC_RPC_URL;
+    const relayerPrivateKey = env.ARC_RELAYER_PRIVATE_KEY;
+    if (!escrow || !arcRpcUrl || !relayerPrivateKey) {
+      throw new Error("STREAM_SETTLE_BATCH missing ARC_STREAM_ESCROW_CONTRACT / ARC_RPC_URL / ARC_RELAYER_PRIVATE_KEY");
+    }
+    const batch = (p.batch as Array<{ channelId: string; proof: unknown; publicSignals: string[]; expiryBlock: string; cumulative: string }>) ?? [];
+    if (batch.length === 0) throw new Error("STREAM_SETTLE_BATCH: empty batch");
+    await queue.setStatus(job.job_id, "submitting", `StreamEscrow.settleBatch (${batch.length} channels)`);
+    const r = await submitSettlementBatch(
+      batch.map((b) => ({
+        channelId: BigInt(b.channelId),
+        proof: b.proof as import("./stream-relayer.js").PendingSettlement["proof"],
+        publicSignals: b.publicSignals,
+        expiryBlock: BigInt(b.expiryBlock),
+        cumulative: BigInt(b.cumulative),
+      })),
+      { arcRpcUrl, arcChainId: env.ARC_CHAIN_ID ? Number(env.ARC_CHAIN_ID) : undefined, escrowAddress: escrow, relayerPrivateKey }
+    );
+    return { txHash: r.txHash, settled: r.count };
   }
 
   if (job.job_type === "RFQ_SETTLE_SUBMIT") {
