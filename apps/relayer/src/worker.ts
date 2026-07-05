@@ -245,6 +245,46 @@ export async function processRelayerJob(queue: JobQueue, job: ServiceJob): Promi
     });
     await queue.setStatus(job.job_id, "burn_validated", `sender ${v.sender.slice(0, 10)}…, ${v.amount6} (6dp)`);
 
+    // Arc dispatch: a pre-built BN254 deposit proof (from
+    // buildDepositProofBn254) means this deposit settles on Arc via
+    // pool.receiveDeposit. HONEST SCOPE BOUNDARY (same shape as MPC settle's,
+    // see docs/ARC_PORT_STATUS.md): this covers the on-chain receiveDeposit
+    // SUBMISSION only, given a proof already built elsewhere (mirroring
+    // withdraw/RFQ/MPC's "relayer submits, doesn't generate" pattern). Two
+    // things remain out of scope pending real infrastructure, not silently
+    // skipped:
+    //   1. Completing the actual Arc-side CCTP mint (calling Arc's real
+    //      MessageTransmitter/TokenMessenger) needs real Arc CCTP contract
+    //      addresses, which are not yet known/configured.
+    //   2. Building the BN254 proof itself needs a BN254-shaped coin (see
+    //      packages/proving/src/bn254/coin.ts) for the note being registered
+    //      — the current note-vault/coin-generation path upstream of this
+    //      job still produces Stellar-coinutils-format coins.
+    if (p.proof && p.publicSignals) {
+      const { arcInvoke, arcNetwork } = await import("@shade/arc-actions");
+      const { SHIELDED_POOL_ABI } = await import("@shade/arc-actions/abi");
+      const arcPool = env.ARC_SHIELDED_POOL_CONTRACT;
+      const arcRelayerKey = env.ARC_RELAYER_PRIVATE_KEY;
+      if (!arcPool || !arcRelayerKey) throw new Error("CCTP_INBOUND_AFTER_USER_BURN (Arc) missing ARC_SHIELDED_POOL_CONTRACT / ARC_RELAYER_PRIVATE_KEY");
+      const { Wallet } = await import("ethers");
+      await queue.setStatus(job.job_id, "submitting", "pool.receiveDeposit (Arc)");
+      const r = await arcInvoke({
+        network: arcNetwork(),
+        contractAddress: arcPool,
+        abi: SHIELDED_POOL_ABI,
+        method: "receiveDeposit",
+        args: [
+          Number(p.source_domain ?? 3), burnTxHash.startsWith("0x") ? burnTxHash : `0x${burnTxHash}`,
+          String(p.token), v.amount6 * 10n, // amount7dp; matches the Stellar path's 6dp->7dp convention
+          String(p.commitment), String(p.encryptedNotePayloadHashHex), String(p.policyIdHex),
+          p.proof, p.publicSignals,
+        ],
+        wallet: new Wallet(arcRelayerKey),
+      });
+      await queue.setStatus(job.job_id, "note_registered", `Arc tx ${r.hash}`);
+      return { state: "active", burnTxHash, receiveDepositTxHash: r.hash, commitment: String(p.commitment) };
+    }
+
     // The note opening (coin) is needed to build the DepositNoteMint proof. Gated:
     // in the app flow this arrives via the prover path; for dev/test a coinPath is
     // supplied. Without it we stop at burn_validated rather than fabricating data.
