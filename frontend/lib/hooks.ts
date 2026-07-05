@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { api, type Me, type Contracts, type HealthFull, type SyncWalletInput } from "./api"
+import { arcProvider } from "./arc"
+import { readMeter, type StreamState } from "./streampay"
 
 export function useContracts() {
   return useQuery({ queryKey: ["contracts"], queryFn: () => api.get<Contracts>("/v1/contracts", false) })
@@ -58,3 +60,40 @@ export function useActivity(enabled: boolean) {
     refetchInterval: 5000,
   })
 }
+
+// -----------------------------------------------------------------------------
+// Arc / StreamPay — real per-second USDC on Arc testnet.
+// -----------------------------------------------------------------------------
+
+/** Live native-USDC balance of an Arc account. Refresh every 3s. */
+export function useArcBalance(address?: string | null) {
+  return useQuery({
+    queryKey: ["arc-balance", address ?? "-"],
+    queryFn: async () => {
+      if (!address) return 0n
+      return arcProvider().getBalance(address)
+    },
+    enabled: !!address,
+    refetchInterval: 3000,
+  })
+}
+
+/**
+ * On-chain meter for a specific stream. Polls every 500ms so the earned()
+ * counter feels alive — Arc block time can jitter ±1s, but the accrual formula
+ * is deterministic (rate × elapsed since lastTick), so intermediate re-reads
+ * are cheap and honest.
+ */
+export function useStreamMeter(streamPayAddr?: string | null, streamId?: string | null) {
+  return useQuery({
+    queryKey: ["stream-meter", streamPayAddr ?? "-", streamId ?? "-"],
+    queryFn: async () => {
+      if (!streamPayAddr || !streamId) throw new Error("no stream")
+      return readMeter(streamPayAddr, streamId)
+    },
+    enabled: !!streamPayAddr && !!streamId,
+    refetchInterval: 500,
+  })
+}
+
+export type { StreamState }

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync-artifacts": "cd .. && npx tsx scripts/sync-frontend-artifacts.ts",
+    "predev": "npm run sync-artifacts",
+    "prebuild": "npm run sync-artifacts",
     "build": "next build --webpack",
     "dev": "next dev",
     "lint": "eslint .",
@@ -51,6 +54,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "ethers": "^6.13.5",
     "expo": "latest",
     "expo-asset": "latest",
     "expo-file-system": "latest",
