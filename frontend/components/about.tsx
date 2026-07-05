@@ -4,12 +4,12 @@ import { useRef } from "react"
 import { motion, useScroll, useTransform, useSpring } from "framer-motion"
 
 const statements = [
-  "Secrets never leave the device.",
-  "Shield USDC. Quote privately. Settle with proof.",
-  "Native USDC — burned on source, minted on Stellar.",
-  "Your note. Your nullifier. Your control.",
-  "One verb per action, forever.",
-  "Privacy with a paper trail — only when you choose.",
+  "Pay by the second. Real USDC. On Arc.",
+  "Continuous authorization of a rate — not a signature per tick.",
+  "Nanopayments too small to have moved before.",
+  "Sub-cent economics with pause, resume, refund.",
+  "Off-chain vouchers. One ZK proof to settle the net.",
+  "Bridged in from anywhere via Circle CCTP.",
 ]
 
 export function About() {
@@ -33,7 +33,7 @@ export function About() {
         className="px-8 md:px-12 mb-0 py-20"
       >
         <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground mb-4">03 — PRINCIPLES</p>
-        <h2 className="font-sans text-3xl md:text-5xl font-light italic">How Shade Thinks</h2>
+        <h2 className="font-sans text-3xl md:text-5xl font-light italic">How Shade Pay Thinks</h2>
       </motion.div>
 
       {/* Horizontal Scroll Container */}

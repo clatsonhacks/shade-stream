@@ -5,27 +5,27 @@ import { motion, AnimatePresence } from "framer-motion"
 
 const features = [
   {
-    title: "Shade Shield",
-    tags: ["Bridge", "CCTP", "Stellar"],
-    description: "Bring USDC in from Base, Ethereum, Arbitrum, or Solana. It burns on the source chain and mints fresh on Stellar. Your private note is generated client-side before anything is signed.",
+    title: "Shade Bridge",
+    tags: ["CCTP v2", "Base Sepolia", "Arc"],
+    description: "Fund your Arc balance from Base Sepolia, Ethereum Sepolia, or Arbitrum Sepolia. USDC burns on the source chain, Circle Iris attests, and native USDC mints on Arc. No wrapped tokens — the real thing.",
     status: "Live",
   },
   {
-    title: "Shade RFQ",
-    tags: ["Quotes", "Solvers", "Intent"],
-    description: "Request a private quote from solvers without revealing your balance. Compare net output, fees, and expiry — accept the best one. If a solver defaults, your note stays untouched.",
+    title: "Shade Stream",
+    tags: ["StreamPay", "Real USDC", "$0.0001/sec"],
+    description: "A payable escrow that streams real native USDC by the second at a fixed rate. Open with a cap, watch the on-chain meter tick, withdraw mid-stream, pause and resume, or stop with an automatic refund of the unspent tail.",
     status: "Live",
   },
   {
-    title: "Shade Remit",
-    tags: ["Payout", "Anchor", "Fiat"],
-    description: "Cash out to a bank, mobile wallet, or cash pickup. Payouts route through licensed anchor partners. We always tell you what's real vs. simulated, right on the control.",
-    status: "Partner-gated",
+    title: "Shade Service",
+    tags: ["x402", "Vouchers", "ZK settle"],
+    description: "Private per-request billing for agents and services. Each call is an off-chain EdDSA voucher — zero gas per tick — and only the net settles on-chain with one Groth16 proof that hides the per-request detail.",
+    status: "Preview",
   },
   {
-    title: "Shade View",
-    tags: ["Disclosure", "Receipt", "Compliance"],
-    description: "Generate a signed disclosure receipt only when you choose to. Pick a date range, select which transactions to include. Nothing is shared until you decide to share it.",
+    title: "Shade Receipts",
+    tags: ["Events", "Audit", "arcscan"],
+    description: "Every run is auditable. Receipts reconstruct from on-chain events (Opened / Withdrawn / Paused / Resumed / Stopped) and prove the value-conservation invariant: payee paid + payer refund equals the deposited cap.",
     status: "Live",
   },
 ]
@@ -48,7 +48,7 @@ export function Works() {
         className="mb-24"
       >
         <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground mb-4">04 — PRODUCT SURFACE</p>
-        <h2 className="font-sans text-3xl md:text-5xl font-light italic">What Shade Does</h2>
+        <h2 className="font-sans text-3xl md:text-5xl font-light italic">What Shade Pay Does</h2>
       </motion.div>
 
       {/* Features List */}

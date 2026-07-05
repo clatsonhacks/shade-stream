@@ -6,12 +6,12 @@ import { motion, useInView } from "framer-motion"
 const ease = [0.25, 0.46, 0.45, 0.94] as const
 
 const nodes = [
-  { label: "Base", pos: "top-[12%] left-[12%]", desc: "L2 on Ethereum" },
-  { label: "Ethereum", pos: "top-[12%] right-[12%]", desc: "Mainnet" },
-  { label: "Arbitrum", pos: "top-1/2 left-[2%] -translate-y-1/2", desc: "L2 Rollup" },
-  { label: "Stellar", pos: "top-1/2 right-[2%] -translate-y-1/2", desc: "Settlement layer" },
-  { label: "Solana", pos: "bottom-[12%] left-[12%]", desc: "High throughput" },
-  { label: "CCTP", pos: "bottom-[12%] right-[12%]", desc: "Circle bridge" },
+  { label: "Base Sepolia", pos: "top-[12%] left-[12%]", desc: "USDC source" },
+  { label: "Ethereum Sepolia", pos: "top-[12%] right-[12%]", desc: "USDC source" },
+  { label: "Arbitrum Sepolia", pos: "top-1/2 left-[2%] -translate-y-1/2", desc: "USDC source" },
+  { label: "Arc", pos: "top-1/2 right-[2%] -translate-y-1/2", desc: "Settlement · USDC gas" },
+  { label: "CCTP v2", pos: "bottom-[12%] left-[12%]", desc: "Cross-chain USDC" },
+  { label: "StreamPay", pos: "bottom-[12%] right-[12%]", desc: "Per-second escrow" },
 ]
 
 export function Coverage() {
@@ -28,17 +28,17 @@ export function Coverage() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 1, ease }}
         >
-          <p className="font-mono text-sm tracking-[0.3em] text-white/50 mb-6">CROSS-CHAIN COVERAGE</p>
+          <p className="font-mono text-sm tracking-[0.3em] text-white/50 mb-6">FUND FROM ANYWHERE</p>
           <h2 className="font-sans text-5xl md:text-6xl lg:text-7xl font-light tracking-tight mb-8 text-white">
-            One private note,
+            Bring USDC in,
             <br />
-            settled <span className="italic text-white/60">everywhere</span>.
+            stream on <span className="italic text-white/60">Arc</span>.
           </h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-lg mb-10 text-white/50">
-            USDC burns on the source chain and mints fresh on Stellar — no wrapped tokens. Every settlement resolves inside a zero-knowledge proof. Your balance never touches a public ledger.
+            USDC burns on the source chain and mints native on Arc via Circle CCTP — no wrapped tokens. A payable escrow then streams that USDC by the second at a fixed rate. Pause, resume, or stop with a refund of the unspent tail.
           </p>
-          <a href="#" className="group inline-flex items-center gap-3 font-mono text-base text-white/60 hover:text-white transition-colors">
-            <span className="border-b border-white/20 pb-1 group-hover:border-white/50 transition-colors">Explore the protocol</span>
+          <a href="/demo" className="group inline-flex items-center gap-3 font-mono text-base text-white/60 hover:text-white transition-colors">
+            <span className="border-b border-white/20 pb-1 group-hover:border-white/50 transition-colors">Try the live demo</span>
             <span className="transition-transform group-hover:translate-x-1">→</span>
           </a>
         </motion.div>
@@ -132,8 +132,8 @@ export function Coverage() {
                   <path d="M14 0L17.5 10.5L28 14L17.5 17.5L14 28L10.5 17.5L0 14L10.5 10.5L14 0Z" fill="white" fillOpacity="0.85" />
                 </motion.svg>
               </motion.div>
-              <span className="text-base font-medium text-white/85">Shade</span>
-              <span className="text-[11px] text-white/35">ZK core</span>
+              <span className="text-base font-medium text-white/85">Shade Pay</span>
+              <span className="text-[11px] text-white/35">Arc · USDC</span>
             </motion.div>
 
             {/* Orbiting pills — same positions as before, enhanced */}

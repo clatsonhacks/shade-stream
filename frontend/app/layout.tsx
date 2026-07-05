@@ -16,9 +16,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "AI-Native Product Builder | Portfolio",
-  description: "System Architect & Interface Designer crafting intelligent digital experiences",
-    generator: 'v0.app'
+  title: "Shade Pay — real-time nanopayments on Arc",
+  description: "Pay by the fraction. Real per-second USDC on Arc, or shielded per-request billing with one ZK settle. Funded cross-chain via Circle CCTP.",
 }
 
 export const viewport: Viewport = {

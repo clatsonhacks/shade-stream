@@ -88,11 +88,11 @@ export function Hero() {
           transition={{ duration: 1, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="self-end text-right"
         >
-          <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground mb-2">ZK CROSS-CHAIN PROTOCOL</p>
+          <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground mb-2">REAL-TIME NANOPAYMENTS · ON ARC</p>
           <h2 className="font-sans text-4xl md:text-6xl lg:text-7xl font-light tracking-tight text-balance" style={{ color: "#EDEAE3" }}>
-            PRIVATE
+            PAY BY THE
             <br />
-            <span className="italic">SETTLEMENT</span>
+            <span className="italic">FRACTION</span>
           </h2>
         </motion.div>
       </motion.div>
@@ -109,7 +109,7 @@ export function Hero() {
           className="font-sans text-base md:text-lg leading-relaxed max-w-[320px]"
           style={{ color: "rgba(237,234,227,0.55)" }}
         >
-          Move USDC privately across chains.<br />Shield it, settle with proof.
+          Real USDC per second on Arc.<br />Stream, pause, refund — no per-tick tx.
         </p>
       </motion.div>
 
@@ -122,7 +122,7 @@ export function Hero() {
         style={{ top: "12%", right: "3.5%", textAlign: "left" }}
       >
         <p className="font-sans text-base md:text-lg leading-relaxed max-w-[320px]" style={{ color: "rgba(237,234,227,0.55)" }}>
-          Your keys. Your note. Your proof.<br />Nothing leaves your device.
+          Millions of ticks, one ZK settle.<br />Private per-request billing.
         </p>
       </motion.div>
 
