@@ -804,6 +804,40 @@ export async function registerRoutes(app: FastifyInstance, store = new Store(), 
     await store.logActivity(userId, { event_type: "cctp_exit.prepare", entity_type: "cctp_exit", entity_id: exitId });
     return { exit_id: exitId };
   });
+  // Arc/EVM: build the UNSIGNED withdrawCctp(to, destinationRecipient, maxFee,
+  // minFinalityThreshold, proof, pub) transaction for the user's EVM wallet to
+  // sign. Same shape as /v1/withdrawals/build-tx — withdraw_cctp reuses the
+  // withdraw circuit (operationType=WITHDRAW_CCTP) with the destination terms
+  // bound into the proof, so the relayer/API can't redirect the outbound burn.
+  app.post("/v1/cctp/outbound/build-tx", async (request) => {
+    await authedUser(store, request);
+    await assertRootHealthy(store);
+    const b = (request.body ?? {}) as {
+      to?: string;
+      destinationRecipient?: string;
+      maxFee?: string;
+      minFinalityThreshold?: number;
+      proof?: { a: [string, string]; b: [[string, string], [string, string]]; c: [string, string] };
+      publicSignals?: string[];
+    };
+    if (!b.to || !b.destinationRecipient || b.maxFee === undefined || b.minFinalityThreshold === undefined || !b.proof || !b.publicSignals) {
+      const e = new Error("to, destinationRecipient, maxFee, minFinalityThreshold, proof, publicSignals required") as Error & { statusCode: number };
+      e.statusCode = 400;
+      throw e;
+    }
+    const { buildUnsignedTx, withdrawCctpArgs, arcNetwork, serializeUnsignedTx } = await import("@shade/arc-actions");
+    const { SHIELDED_POOL_ABI } = await import("@shade/arc-actions/abi");
+    const contractAddress = process.env.ARC_SHIELDED_POOL_CONTRACT ?? "";
+    const unsignedTx = await buildUnsignedTx({
+      network: arcNetwork(),
+      from: b.to,
+      contractAddress,
+      abi: SHIELDED_POOL_ABI,
+      method: "withdrawCctp",
+      params: withdrawCctpArgs(b.to, b.destinationRecipient, BigInt(b.maxFee), b.minFinalityThreshold, b.proof, b.publicSignals),
+    });
+    return { unsigned_tx: serializeUnsignedTx(unsignedTx), sign_with: "evm_wallet", submit_to: "/v1/cctp/outbound/submit (signedRawTx)" };
+  });
   // Submit a prepared withdraw_cctp proof via the relayer (proof-bound outbound burn).
   app.post("/v1/cctp/outbound/submit", async (request) => {
     const userId = await authedUser(store, request);

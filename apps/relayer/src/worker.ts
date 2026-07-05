@@ -158,7 +158,35 @@ export async function processRelayerJob(queue: JobQueue, job: ServiceJob): Promi
   }
 
   if (job.job_type === "RFQ_SETTLE_SUBMIT") {
-    await queue.setStatus(job.job_id, "submitting", "pool.rfq_settle");
+    // Dispatch on payload shape: `proof` (object, from @shade/proving's bn254
+    // buildWithdrawProofBn254 — rfq_settle reuses the withdraw circuit with
+    // operationType=RFQ_SETTLEMENT) means Arc; `proofHex` (Soroban byte blob)
+    // means the legacy Stellar path. Both keep the identical guarantee: the
+    // solver's ed25519 signature over quoteHash is checked ON-CHAIN by the
+    // pool (via a pluggable verifier on Arc, natively on Soroban) — the
+    // relayer never itself decides whether the solver is authorized.
+    if (p.proof && p.publicSignals) {
+      await queue.setStatus(job.job_id, "submitting", "pool.rfqSettle (Arc)");
+      const { arcInvoke, arcNetwork } = await import("@shade/arc-actions");
+      const { SHIELDED_POOL_ABI } = await import("@shade/arc-actions/abi");
+      const arcPool = env.ARC_SHIELDED_POOL_CONTRACT;
+      const arcRelayerKey = env.ARC_RELAYER_PRIVATE_KEY;
+      if (!arcPool || !arcRelayerKey) throw new Error("RFQ_SETTLE_SUBMIT (Arc) missing ARC_SHIELDED_POOL_CONTRACT / ARC_RELAYER_PRIVATE_KEY");
+      const { Wallet } = await import("ethers");
+      const r = await arcInvoke({
+        network: arcNetwork(),
+        contractAddress: arcPool,
+        abi: SHIELDED_POOL_ABI,
+        method: "rfqSettle",
+        args: [
+          p.toSolver, p.quoteHash, p.intentHash, p.fillReceiptHash,
+          p.solverPubkey, p.solverSig, p.proof, p.publicSignals,
+        ],
+        wallet: new Wallet(arcRelayerKey),
+      });
+      return { txHash: r.hash };
+    }
+    await queue.setStatus(job.job_id, "submitting", "pool.rfq_settle (Stellar)");
     const r = sorobanInvoke({ contractId: pool, secret: relayerSecret, method: "rfq_settle", rpcUrl: RPC, passphrase: PASS, retries: 3,
       args: ["--to_solver", String(p.toSolver), "--proof_bytes", String(p.proofHex), "--pub_signals_bytes", String(p.publicHex),
         "--quote_hash", String(p.quoteHash), "--intent_hash", String(p.intentHash), "--fill_receipt_hash", String(p.fillReceiptHash),

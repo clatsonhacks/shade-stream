@@ -316,6 +316,145 @@ async function testWithdrawFullLoop(network: Network, provider: JsonRpcProvider,
 
   const spent: boolean = await (nullReg as any).isSpent(pub[0]);
   check("withdraw nullifier spent on the shared registry", spent === true);
+
+  // ============================================================
+  // rfqSettle: same real pool, a mock ed25519 verifier (solver-signature
+  // check delegated per docs/ARC_PORT_STATUS.md), and a fresh deposit to
+  // reimburse from. Proves SHIELDED_POOL_ABI's rfqSettle argument order
+  // (address, bytes32, bytes32, bytes32, bytes32, bytes, tuple, uint256[18])
+  // matches what the compiled contract actually decodes.
+  // ============================================================
+  const mockEd25519Artifact = loadArtifact("MockVerifiers.sol/MockEd25519.json");
+  const mockEd25519Factory = new ContractFactory(mockEd25519Artifact.abi as any, mockEd25519Artifact.bytecode, admin);
+  const mockEd25519 = await mockEd25519Factory.deploy({ nonce: adminNonce++ });
+  await mockEd25519.waitForDeployment();
+  await ((await (pool.connect(admin) as any).setEd25519Verifier(await mockEd25519.getAddress(), { nonce: adminNonce++ })) as any).wait();
+  const solverPubkey = "0x" + "50".repeat(32);
+  await ((await (pool.connect(admin) as any).setAuthorizedSolver(solverPubkey, true, { nonce: adminNonce++ })) as any).wait();
+
+  // second deposit: seed 500 more note supply for the RFQ reimbursement.
+  const rfqDepositCommitment = 987654321098765432109876543210n;
+  const rfqCctpNonce = "0x" + "ee".repeat(32);
+  const rfqDepositPub: string[] = new Array(14).fill("0");
+  rfqDepositPub[0] = rfqDepositCommitment.toString();
+  rfqDepositPub[1] = "4";
+  rfqDepositPub[2] = "3";
+  rfqDepositPub[4] = hashToField(BigInt(rfqCctpNonce)).toString();
+  rfqDepositPub[5] = "1";
+  rfqDepositPub[6] = "51";
+  rfqDepositPub[7] = "500";
+  rfqDepositPub[8] = addressHash(usdcAddress).toString();
+  rfqDepositPub[9] = addressHash(poolAddress).toString();
+  rfqDepositPub[10] = hashToField(1n).toString();
+  rfqDepositPub[11] = hashToField(1n).toString();
+  rfqDepositPub[12] = POOL_ID.toString();
+  rfqDepositPub[13] = CHAIN_ID.toString();
+  await ((await (pool.connect(admin) as any).receiveDeposit(
+    3, rfqCctpNonce, usdcAddress, 500n, rfqDepositCommitment, 1n, 1n, proof, rfqDepositPub, { nonce: adminNonce++ }
+  )) as any).wait();
+
+  const solverAddress = admin.address; // arbitrary recipient for this ABI-shape check
+  const quoteHash = "0x" + "11".repeat(32);
+  const intentHash = "0x" + "22".repeat(32);
+  const fillReceiptHash = "0x" + "33".repeat(32);
+  const rfqPub: string[] = new Array(18).fill("0");
+  rfqPub[0] = "0x" + "77".repeat(32); // nullifierHash
+  rfqPub[1] = "3"; // OP_RFQ_SETTLEMENT
+  rfqPub[2] = "500"; // credit
+  rfqPub[4] = "0"; // relayerFee
+  rfqPub[5] = deadline.toString();
+  rfqPub[6] = (await (pool as any).getRoot()).toString();
+  rfqPub[7] = ASSOC_ROOT.toString();
+  rfqPub[8] = POOL_ID.toString();
+  rfqPub[9] = CHAIN_ID.toString();
+  rfqPub[10] = hashToField(BigInt(quoteHash)).toString();
+  rfqPub[11] = hashToField(BigInt(intentHash)).toString();
+  rfqPub[12] = hashToField(BigInt(fillReceiptHash)).toString();
+  rfqPub[17] = usdcAssetId.toString();
+
+  const solverBalBefore: bigint = await (usdc as any).balanceOf(solverAddress);
+  const rfqResult = await arcInvoke({
+    network,
+    contractAddress: poolAddress,
+    abi: SHIELDED_POOL_ABI,
+    method: "rfqSettle",
+    args: [solverAddress, quoteHash, intentHash, fillReceiptHash, solverPubkey, "0x00", proof, rfqPub],
+    wallet: new Wallet(ADMIN_KEY, provider),
+  });
+  check("real rfqSettle() settles via arcInvoke", rfqResult.status === "SUCCESS", rfqResult.hash);
+  const solverBalAfter: bigint = await (usdc as any).balanceOf(solverAddress);
+  check("solver reimbursed the full credit", solverBalAfter - solverBalBefore === 500n, `${solverBalAfter - solverBalBefore}`);
+  // arcInvoke used automatic nonce resolution for admin (not the manual
+  // counter below) — resync before resuming explicit-nonce calls.
+  adminNonce = await provider.getTransactionCount(admin.address, "latest");
+
+  // ============================================================
+  // withdrawCctp: proves SHIELDED_POOL_ABI's withdrawCctp argument order
+  // (address, bytes32, uint256, uint32, tuple, uint256[18]) matches the
+  // compiled contract, via the SAME build-tx -> sign -> broadcast path
+  // /v1/cctp/outbound/build-tx uses.
+  // ============================================================
+  const messengerArtifact = loadArtifact("RfqCctp.t.sol/MockTokenMessenger.json");
+  const messengerFactory = new ContractFactory(messengerArtifact.abi as any, messengerArtifact.bytecode, admin);
+  const messenger = await messengerFactory.deploy({ nonce: adminNonce++ });
+  await messenger.waitForDeployment();
+  const ARB_DOMAIN = 3;
+  await ((await (pool.connect(admin) as any).setCctpConfig(await messenger.getAddress(), usdcAddress, ARB_DOMAIN, { nonce: adminNonce++ })) as any).wait();
+
+  // third deposit: seed 300 more note supply for the CCTP exit burn.
+  const cctpDepositCommitment = 555555555555555555555555555555n;
+  const cctpDepositNonce = "0x" + "ff".repeat(32);
+  const cctpDepositPub: string[] = new Array(14).fill("0");
+  cctpDepositPub[0] = cctpDepositCommitment.toString();
+  cctpDepositPub[1] = "4";
+  cctpDepositPub[2] = "3";
+  cctpDepositPub[4] = hashToField(BigInt(cctpDepositNonce)).toString();
+  cctpDepositPub[5] = "1";
+  cctpDepositPub[6] = "31";
+  cctpDepositPub[7] = "300";
+  cctpDepositPub[8] = addressHash(usdcAddress).toString();
+  cctpDepositPub[9] = addressHash(poolAddress).toString();
+  cctpDepositPub[10] = hashToField(1n).toString();
+  cctpDepositPub[11] = hashToField(1n).toString();
+  cctpDepositPub[12] = POOL_ID.toString();
+  cctpDepositPub[13] = CHAIN_ID.toString();
+  await ((await (pool.connect(admin) as any).receiveDeposit(
+    3, cctpDepositNonce, usdcAddress, 300n, cctpDepositCommitment, 1n, 1n, proof, cctpDepositPub, { nonce: adminNonce++ }
+  )) as any).wait();
+
+  const cctpRecipient = "0x" + "88".repeat(32);
+  const cctpMaxFee = 5n;
+  const cctpMinFinality = 1000;
+  const cctpPub: string[] = new Array(18).fill("0");
+  cctpPub[0] = "0x" + "99".repeat(32); // nullifierHash
+  cctpPub[1] = "2"; // OP_WITHDRAW_CCTP
+  cctpPub[2] = "300"; // amount
+  cctpPub[5] = deadline.toString();
+  cctpPub[6] = (await (pool as any).getRoot()).toString();
+  cctpPub[7] = ASSOC_ROOT.toString();
+  cctpPub[8] = POOL_ID.toString();
+  cctpPub[9] = CHAIN_ID.toString();
+  cctpPub[13] = String(ARB_DOMAIN);
+  cctpPub[14] = BigInt(cctpRecipient).toString();
+  cctpPub[15] = cctpMaxFee.toString();
+  cctpPub[16] = String(cctpMinFinality);
+  cctpPub[17] = usdcAssetId.toString();
+
+  const { withdrawCctpArgs } = await import("./index.js");
+  const cctpUnsignedTx = await buildUnsignedTx({
+    network,
+    from: deployer.address,
+    contractAddress: poolAddress,
+    abi: SHIELDED_POOL_ABI,
+    method: "withdrawCctp",
+    params: withdrawCctpArgs(deployer.address, cctpRecipient, cctpMaxFee, cctpMinFinality, proof, cctpPub),
+  });
+  const cctpSignedTx = await deployer.signTransaction(cctpUnsignedTx);
+  const cctpResult = await broadcastSignedTx(network, cctpSignedTx);
+  check("real withdrawCctp() settles via build-tx -> sign -> broadcast path", cctpResult.status === "SUCCESS", cctpResult.hash);
+
+  const burnedAmount: bigint = await (messenger as any).lastAmount();
+  check("CCTP messenger received the correct burn amount", burnedAmount === 300n, `${burnedAmount}`);
 }
 
 function finish() {
