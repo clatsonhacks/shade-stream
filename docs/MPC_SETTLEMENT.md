@@ -2,7 +2,7 @@
 
 > Testnet only; no mainnet claim. MPC supports **same-asset** private crossing
 > (§9) and **priced cross-asset** USDC↔XLM crossing (§10). USDC→XLM is ALSO
-> available via the atomic RFQ route (see `docs/RFQ_USDC_XLM.md`). MPC dev mode is
+> available via the atomic RFQ route. MPC dev mode is
 > not a distributed trust model.
 
 ## Same-asset crossing (§9) — implemented

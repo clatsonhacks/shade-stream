@@ -72,7 +72,7 @@ $0.0001/sec, value-conservation invariant asserted on-chain from `Withdrawn` +
 | Stop paid: 0.0013 USDC → service, 0.0026 USDC refunded to agent | (from `Stopped` event) |
 
 Total streamed to the service address: **0.0024 USDC** over the run, verifiable
-on arcscan. Full run log: [docs/testnet-transactions.md](docs/testnet-transactions.md).
+on arcscan. Full run log: see [docs/E2E_REAL_WORKFLOW.md](docs/E2E_REAL_WORKFLOW.md).
 
 ### Privacy layer — shielded net (`agent-service`)
 Both ZK proofs verified on-chain by **Arc's BN254 pairing precompiles**:

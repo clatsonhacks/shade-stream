@@ -131,15 +131,14 @@ from the payer, as promised). Stream `0x1cade4…077f5`, cap 0.005 USDC, rate
 
 Value-conservation invariant asserted on-chain from the `Withdrawn` and
 `Stopped` events: `0.0011 + 0.0013 + 0.0026 = 0.005 USDC` = deposited cap;
-`escrow.balance == 0` afterwards. Full log in `docs/testnet-transactions.md`.
+`escrow.balance == 0` afterwards.
 
 ---
 
 ## 2B. The privacy layer — 100 requests, one ZK settle (agent-service)
 
 Off-chain vouchers, one on-chain settle for the private net, service earns a
-shielded note. Real code path; the **pool asset is currently `MockERC20`**
-(seam: `docs/ASSET_BINDING.md`).
+shielded note. Real code path; the **pool asset is currently `MockERC20`**.
 
 ```bash
 npm run agent-service-demo         # local anvil (no funds needed)

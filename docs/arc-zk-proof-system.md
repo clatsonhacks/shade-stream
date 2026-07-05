@@ -25,7 +25,7 @@ This document tracks the port of Shade's ZK proof system from BLS12-381 (Soroban
 
 ## Curve Choice: BN254
 
-The live Stellar/Soroban implementation uses **BLS12-381** (documented in `docs/zk-proof-system.md`, proven testnet tx `177f3ea3...`). Arc is a standard EVM L1 whose Solidity precompiles (`ecAdd`, `ecMul`, `ecPairing` at addresses 0x06/0x07/0x08) support **BN254 only**.
+The earlier Stellar/Soroban implementation used **BLS12-381** (proven testnet tx `177f3ea3...`). Arc is a standard EVM L1 whose Solidity precompiles (`ecAdd`, `ecMul`, `ecPairing` at addresses 0x06/0x07/0x08) support **BN254 only**.
 
 **Decision:** Re-derive the entire ZK layer to BN254 to leverage native Solidity precompiles for cost-effective proof verification at scale.
 

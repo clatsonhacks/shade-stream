@@ -8,7 +8,7 @@ Curve: BLS12-381 → **BN254** (for native EVM pairing precompiles).
 ## Phase 1 — BN254 derisking spike ✅ COMPLETE & PROVEN
 
 The full BN254 ZK layer works end-to-end on EVM (the direct analog of the
-BLS12-381/Soroban spike in `docs/zk-proof-system.md`). See `docs/arc-zk-proof-system.md`.
+earlier BLS12-381/Soroban spike). See `docs/arc-zk-proof-system.md`.
 
 ## Phase 2 — Full system port ✅ COMPLETE (contracts, circuits, proving, all 5 settlement flows wired)
 
