@@ -19,6 +19,11 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "circuits:build": "tsx scripts/circuits-build.ts",
     "circuits:test": "tsx scripts/circuits-test.ts",
+    "circuits:build:arc": "tsx scripts/circuits-build-arc.ts",
+    "circuits:test:arc": "tsx scripts/circuits-test-arc.ts",
+    "arc:sync-verifiers": "tsx scripts/sync-arc-verifiers.ts",
+    "contracts:build:arc": "cd contracts/arc && forge build",
+    "contracts:test:arc": "cd contracts/arc && forge test -vv",
     "proofs:test": "tsx apps/prover/src/proofs-test.ts",
     "vault:test": "tsx packages/note-vault/src/vault-test.ts",
     "auth-privy:test": "tsx packages/auth-privy/src/auth-test.ts",
@@ -49,6 +54,7 @@
     "test:ts": "npm run vault:test && npm run auth-privy:test && npm run sdk:test && npm run vault-api:test && npm run deposit-api:test && npm run route-auth:test && npm run relayer-user-burn:test && npm run frontend-flow:test && npm run deposit-ui:test && npm run mpc-crypto:test && npm run matcher:test && npm run priced-matcher:test && npm run assets:test && npm run rfq-atomic:test && npm run cctp-footguns:test && npm run shade-view:test && npm run remit:test",
     "test:contracts": "tsx scripts/contracts-test.ts",
     "test:circuits": "tsx scripts/circuits-test.ts",
+    "test:arc": "npm run circuits:test:arc && npm run contracts:test:arc",
     "test": "npm run test:ts && npm run test:contracts && npm run test:circuits",
     "test:security": "npm run route-auth:test && npm run relayer-user-burn:test && npm run security:gates",
     "ci:full": "npm run typecheck && npm run test && npm run security:gates",
@@ -92,6 +98,8 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/pg": "^8.11.10",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
     "snarkjs": "^0.7.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
