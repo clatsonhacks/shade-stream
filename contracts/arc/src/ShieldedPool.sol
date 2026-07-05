@@ -74,8 +74,14 @@ contract ShieldedPool is AccessControl, Pausable, IncrementalMerkleTree {
 
     INullifierRegistry public immutable nullifierRegistry;
 
-    // ASP allowlist root that spend proofs must match.
+    // ASP allowlist root that spend proofs must match. This is the CANONICAL
+    // compliance source of truth (see docs/COMPLIANCE_MODEL.md): every spend
+    // circuit binds an associationRoot public signal that each settlement path
+    // checks == this value, so there is no separate ComplianceRegistry contract
+    // to keep in sync. `associationRootVersion` increments on each update so
+    // receipts/audits can reference which policy root was active at settle time.
     uint256 public associationRoot;
+    uint256 public associationRootVersion;
 
     // asset registry: asset_id (field element) => ERC-20 token
     mapping(uint256 => address) public assetToken;
@@ -125,7 +131,7 @@ contract ShieldedPool is AccessControl, Pausable, IncrementalMerkleTree {
         uint256 newRoot
     );
     event AssetRegistered(uint256 indexed assetId, address token);
-    event AssociationRootSet(uint256 root);
+    event AssociationRootSet(uint256 root, uint256 version);
     event CommitteeSet(uint256 size);
 
     // ---- errors (mirror Soroban Error enum) ----
@@ -549,7 +555,8 @@ contract ShieldedPool is AccessControl, Pausable, IncrementalMerkleTree {
     // ============================================================
     function setAssociationRoot(uint256 root) external onlyRole(ADMIN_ROLE) {
         associationRoot = root;
-        emit AssociationRootSet(root);
+        associationRootVersion += 1;
+        emit AssociationRootSet(root, associationRootVersion);
     }
 
     function getAssociationRoot() external view returns (uint256) {
