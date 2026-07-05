@@ -77,5 +77,18 @@ npm run stream-lifecycle:test   # 15/15 — full lifecycle, real proofs, real ch
 - **settleBatch**: closes N channels in one tx, proof-gated per channel, atomic on any bad member — cheaper than N individual settles (Foundry-measured).
 - **Gateway**: on-Arc batching is done; the gasless/cross-chain Gateway variant is a documented integration seam (`submitSettlementBatch`), not built — needs real Circle endpoints, same class of external-address gap as Arc CCTP.
 
-## Remaining (Phase 6, not yet started)
-- **Phase 6**: per-stream Shade View receipts, agent layer (payer/seller/broker), compliance-registry decision.
+## Phase 6 — Compliance + receipts + agents ✅ COMPLETE
+
+| Piece | Where | Test |
+|-------|-------|------|
+| Compliance decision (pool associationRoot canonical + version counter) | `contracts/arc/src/ShieldedPool.sol`, `docs/COMPLIANCE_MODEL.md` | 79 Foundry (unchanged) |
+| Per-channel receipts (pure reconstruction) | `packages/sdk/src/receipts.ts` | 13/13 (`npm run receipts:test`) |
+| On-chain receipt fetch | `packages/arc-actions/src/index.ts` (`fetchChannelReceipt`) | lifecycle test (real events) |
+| Agent layer (PayerAgent / PayeeAgent) | `packages/sdk/src/agents.ts` | 17/17 (`npm run agents:test`) |
+
+- **Compliance**: the pool's `associationRoot` stays the single canonical ASP source of truth (no separate registry — the circuits already bind exactly it); a version counter makes the active policy auditable. Deny-set enforcement is deferred until the exclusion circuit exists (documented, not gapped silently).
+- **Receipts**: `reconstructChannelReceipt` turns `ChannelOpened/Settled/Reclaimed` events into a `StreamReceipt` (cap, state, gross, payee/refund split) — the auditable form of invariant #8. Validated against REAL on-chain events in the lifecycle test.
+- **Agents**: a `PayerAgent` (rate + budget + pause-on-drop, monotonic vouchers) and a `PayeeAgent` (verify + enforce rate + track highest + decide-to-settle) — the per-tick decision logic the design doc calls meaningful agency, as pure testable code over the voucher SDK.
+
+## All phases complete
+Phases 1-6 of the plan are done. The Broker Agent (ERC-8004 bonded matching) was a stretch goal in the design doc and remains unimplemented; the Circle Gateway gasless/cross-chain batching is a documented seam (`docs/GATEWAY_SPIKE.md`) blocked on real Gateway endpoints.
