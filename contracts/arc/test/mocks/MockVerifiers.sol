@@ -29,6 +29,10 @@ contract MockVerifier {
         external view returns (bool) { return result; }
     function verifyProof(uint256[2] calldata, uint256[2][2] calldata, uint256[2] calldata, uint256[20] calldata)
         external view returns (bool) { return result; }
+    function verifyProof(uint256[2] calldata, uint256[2][2] calldata, uint256[2] calldata, uint256[13] calldata)
+        external view returns (bool) { return result; }
+    function verifyProof(uint256[2] calldata, uint256[2][2] calldata, uint256[2] calldata, uint256[11] calldata)
+        external view returns (bool) { return result; }
 }
 
 /// @dev Mock ed25519 verifier — returns configurable result (real ed25519 lib is
